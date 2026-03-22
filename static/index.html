@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Memory Chat — Part 2</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 320px;
+      min-width: 280px;
+      background: #1e293b;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #334155;
+      overflow-y: auto;
+    }
+    #sidebar h2 {
+      padding: 18px 16px 10px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      border-bottom: 1px solid #334155;
+    }
+    .mem-section { padding: 12px 14px; border-bottom: 1px solid #1e293b; }
+    .mem-section h3 { font-size: 11px; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
+    .mem-section p  { font-size: 12px; color: #cbd5e1; line-height: 1.5; white-space: pre-wrap; }
+    .mem-badge {
+      display: inline-block;
+      background: #334155;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 11px;
+      color: #94a3b8;
+      margin: 2px 2px 2px 0;
+    }
+
+    /* ── Main chat ── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #top-bar {
+      padding: 14px 20px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #top-bar input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    #top-bar input:focus { outline: none; border-color: #6366f1; }
+    #top-bar button {
+      background: #6366f1;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #top-bar button:hover { background: #4f46e5; }
+    #status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #ef4444;
+      flex-shrink: 0;
+    }
+    #status-dot.ok { background: #22c55e; }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg {
+      max-width: 72%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .msg.user      { align-self: flex-end; background: #4f46e5; color: #fff; }
+    .msg.assistant { align-self: flex-start; background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+    .msg.system    { align-self: center; background: transparent; color: #64748b; font-size: 12px; font-style: italic; }
+
+    #input-row {
+      padding: 14px 20px;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      display: flex;
+      gap: 10px;
+    }
+    #user-input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #e2e8f0;
+      font-size: 14px;
+      resize: none;
+    }
+    #user-input:focus { outline: none; border-color: #6366f1; }
+    #send-btn {
+      background: #6366f1;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #send-btn:disabled { background: #334155; cursor: not-allowed; }
+    #send-btn:not(:disabled):hover { background: #4f46e5; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ─────────────────────────────────────── -->
+<div id="sidebar">
+  <h2>Memory Inspector</h2>
+
+  <div class="mem-section">
+    <h3>👤 Session</h3>
+    <p id="sb-session">—</p>
+  </div>
+
+  <div class="mem-section">
+    <h3>🧠 Episodic Facts</h3>
+    <div id="sb-episodes"><p style="color:#475569;font-size:12px">No facts yet</p></div>
+  </div>
+
+  <div class="mem-section">
+    <h3>📋 Session Summary</h3>
+    <p id="sb-session-sum" style="color:#475569;font-size:12px">No summary yet</p>
+  </div>
+
+  <div class="mem-section">
+    <h3>🌐 Lifetime Summary</h3>
+    <p id="sb-lifetime" style="color:#475569;font-size:12px">No lifetime summary yet</p>
+  </div>
+</div>
+
+<!-- ── Main chat ───────────────────────────────────── -->
+<div id="main">
+  <div id="top-bar">
+    <div id="status-dot" title="API status"></div>
+    <input id="user-id-input" placeholder="Your user_id (e.g. alice)" value="alice"/>
+    <input id="session-id-input" placeholder="session_id (optional)" style="max-width:160px"/>
+    <button onclick="startSession()">Connect</button>
+  </div>
+
+  <div id="messages">
+    <div class="msg system">Enter your user_id and click Connect to start.</div>
+  </div>
+
+  <div id="input-row">
+    <textarea id="user-input" rows="2" placeholder="Type your message…" disabled
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+    <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8000';
+  let userId    = '';
+  let sessionId = '';
+  let connected = false;
+
+  async function checkHealth() {
+    try {
+      const r = await fetch(`${API}/api/health`);
+      document.getElementById('status-dot').className = r.ok ? 'ok' : '';
+    } catch { document.getElementById('status-dot').className = ''; }
+  }
+
+  async function startSession() {
+    userId    = document.getElementById('user-id-input').value.trim() || 'user1';
+    sessionId = document.getElementById('session-id-input').value.trim() || `${userId}_default`;
+    connected = true;
+
+    document.getElementById('user-input').disabled  = false;
+    document.getElementById('send-btn').disabled    = false;
+    document.getElementById('sb-session').textContent = `${userId} / ${sessionId}`;
+
+    addMsg('system', `Connected as "${userId}" (session: ${sessionId})`);
+    await refreshMemory();
+  }
+
+  async function sendMessage() {
+    if (!connected) return;
+    const ta  = document.getElementById('user-input');
+    const msg = ta.value.trim();
+    if (!msg) return;
+
+    ta.value = '';
+    addMsg('user', msg);
+    document.getElementById('send-btn').disabled = true;
+
+    try {
+      const r = await fetch(`${API}/api/chat`, {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body:    JSON.stringify({ user_id: userId, session_id: sessionId, message: msg }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.detail || JSON.stringify(data));
+      addMsg('assistant', data.reply);
+      updateSidebar(data.memory_used);
+    } catch (e) {
+      addMsg('system', `Error: ${e.message}`);
+    }
+
+    document.getElementById('send-btn').disabled = false;
+    document.getElementById('user-input').focus();
+  }
+
+  function addMsg(role, text) {
+    const div = document.createElement('div');
+    div.className = `msg ${role}`;
+    div.textContent = text;
+    const container = document.getElementById('messages');
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function updateSidebar(mem) {
+    if (!mem) return;
+
+    // Episodes
+    const epDiv = document.getElementById('sb-episodes');
+    const eps   = mem.episodic_facts || [];
+    if (eps.length) {
+      epDiv.innerHTML = eps.map(e =>
+        `<span class="mem-badge" title="importance: ${e.importance?.toFixed(2) ?? '?'}">
+           ${e.fact}
+         </span>`
+      ).join('');
+    }
+
+    // Summaries
+    if (mem.session_summary) {
+      document.getElementById('sb-session-sum').textContent = mem.session_summary;
+    }
+    if (mem.lifetime_summary) {
+      document.getElementById('sb-lifetime').textContent = mem.lifetime_summary;
+    }
+  }
+
+  async function refreshMemory() {
+    try {
+      const r = await fetch(`${API}/api/memory/${userId}?session_id=${sessionId}`);
+      const d = await r.json();
+      updateSidebar({
+        episodic_facts:   d.episodic_facts,
+        session_summary:  d.session_summary,
+        lifetime_summary: d.lifetime_summary,
+      });
+    } catch {}
+  }
+
+  checkHealth();
+  setInterval(checkHealth, 10000);
+</script>
+</body>
+</html>
